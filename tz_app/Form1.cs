@@ -4,6 +4,7 @@ using System.Data.SqlClient;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Collections;
+using System.Linq;
 
 namespace tz_app
 {
@@ -83,7 +84,7 @@ namespace tz_app
 
         private void SearchAndFillDataGridView(string searchValue)
         {
-            string query = "SELECT R.F_PROJ_ID, O.F_OBJECT_ID, R.F_RELATION_TYPE, T.F_DESCRIPTION, T.F_TYPE_NAME, T.F_NOTE, O.F_OBJECT_TYPE, OT.F_OBJ_TYPE_NAME, A.F_ATTRIBUTE_LIST " +
+            string query = "SELECT R.F_PROJ_ID, O.F_OBJECT_ID, R.F_RELATION_TYPE, T.F_DESCRIPTION, T.F_TYPE_NAME, T.F_NOTE, O.F_OBJECT_TYPE, OT.F_OBJ_TYPE_NAME, A.F_ATTRIBUTE_LIST, B.F_VALUE_LIST " +
                            "FROM [IMS_RELATIONS] R " +
                            "INNER JOIN [IMS_RELATION_TYPES] T ON R.F_RELATION_TYPE = T.F_RELATION_TYPE " +
                            "INNER JOIN [IMS_OBJECTS] O ON R.F_PART_ID = O.F_ID " +
@@ -94,7 +95,13 @@ namespace tz_app
                            "    INNER JOIN [IMS_ATTRIBUTES] AT ON AO.F_ATTRIBUTE_ID = AT.F_ATTRIBUTE_ID " +
                            "    GROUP BY AO.F_OBJECT_ID " +
                            ") A ON O.F_OBJECT_ID = A.F_OBJECT_ID " +
+                           "LEFT JOIN (" +
+                           "    SELECT AO.F_OBJECT_ID, STRING_AGG(CONCAT(AO.F_INTEGER_VALUE, ', ', AO.F_STRING_VALUE), '; ') AS F_VALUE_LIST " +
+                           "    FROM [IMS_OBJECT_ATTRS] AO " +
+                           "    GROUP BY AO.F_OBJECT_ID " +
+                           ") B ON O.F_OBJECT_ID = B.F_OBJECT_ID " +
                            "WHERE R.[F_PROJ_ID] = @searchValue";
+
 
             SqlCommand command = new SqlCommand(query, sqlConnection);
             command.Parameters.AddWithValue("@searchValue", searchValue);
@@ -138,17 +145,20 @@ namespace tz_app
             worksheet = workbook.ActiveSheet;
             worksheet.Name = "Объект";
 
-            for (int i = 1; i < dataGridView1.Columns.Count + 1; i++)
-            {
-                worksheet.Cells[1, i] = dataGridView1.Columns[i - 1].HeaderText;
-            }
             for (int i = 0; i < dataGridView1.Rows.Count; i++)
             {
                 for (int j = 0; j < dataGridView1.Columns.Count; j++)
                 {
                     if (dataGridView1.Rows[i].Cells[j].Value != null)
                     {
-                        worksheet.Cells[i + 2, j + 1] = dataGridView1.Rows[i].Cells[j].Value.ToString();
+                        string cellValue = dataGridView1.Rows[i].Cells[j].Value.ToString();
+                        if (dataGridView1.Columns[j].Name == "F_VALUE_LIST")
+                        {
+                            string[] elements = cellValue.Split(new[] { "; , " }, StringSplitOptions.None);
+                            elements = elements.Where(x => !string.IsNullOrWhiteSpace(x)).ToArray();
+                            cellValue = string.Join("; , ", elements);
+                        }
+                        worksheet.Cells[i + 2, j + 1] = cellValue;
                     }
                     else
                     {
@@ -167,6 +177,7 @@ namespace tz_app
             dataGridView1.Columns["F_OBJECT_TYPE"].HeaderText = "Номер типа объекта";
             dataGridView1.Columns["F_OBJ_TYPE_NAME"].HeaderText = "Имя объекта";
             dataGridView1.Columns["F_ATTRIBUTE_LIST"].HeaderText = "Список атрибутов объекта";
+            dataGridView1.Columns["F_VALUE_LIST"].HeaderText = "Список значений атрибутов объекта";
 
             for (int i = 1; i < dataGridView1.Columns.Count + 1; i++)
             {
@@ -181,17 +192,20 @@ namespace tz_app
 
 
             worksheet.Columns.AutoFit();
-            worksheet.Range["A:I"].HorizontalAlignment = Microsoft.Office.Interop.Excel.XlHAlign.xlHAlignCenter;
-            worksheet.Range["A:I"].VerticalAlignment = Microsoft.Office.Interop.Excel.XlVAlign.xlVAlignCenter;
+            worksheet.Range["A:J"].HorizontalAlignment = Microsoft.Office.Interop.Excel.XlHAlign.xlHAlignCenter;
+            worksheet.Range["A:J"].VerticalAlignment = Microsoft.Office.Interop.Excel.XlVAlign.xlVAlignCenter;
 
             worksheet.Columns["F:F"].ColumnWidth = 60;
-            worksheet.Columns["I:I"].ColumnWidth = 60; 
+            worksheet.Columns["I:I"].ColumnWidth = 60;
+            worksheet.Columns["J:J"].ColumnWidth = 60;
 
-            worksheet.Columns["F:F"].WrapText = true; 
-            worksheet.Columns["I:I"].WrapText = true; 
+            worksheet.Columns["F:F"].WrapText = true;
+            worksheet.Columns["I:I"].WrapText = true;
+            worksheet.Columns["J:J"].WrapText = true;
 
             worksheet.Columns["F:F"].EntireRow.AutoFit();
             worksheet.Columns["I:I"].EntireRow.AutoFit();
+            worksheet.Columns["J:J"].EntireRow.AutoFit();
 
 
             SaveFileDialog saveDialog = new SaveFileDialog();
